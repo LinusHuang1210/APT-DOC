@@ -1,0 +1,154 @@
+
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>APT Knowledge Base</title>
+  <style>
+    :root {
+      --bg:#0b1220; --card:#121a2b; --text:#e6ecff; --muted:#9fb0d9; --accent:#7aa2ff; --border:#23304d;
+    }
+    *{box-sizing:border-box}
+    body{margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto; background:var(--bg); color:var(--text);}
+    header{padding:24px 16px; border-bottom:1px solid var(--border); background:linear-gradient(180deg,#0f172a,#0b1220);}
+    h1{margin:0 0 8px; font-size:22px;}
+    .sub{color:var(--muted); font-size:14px}
+    main{max-width:900px; margin:24px auto; padding:0 16px;}
+    .toolbar{display:flex; gap:12px; flex-wrap:wrap; margin-bottom:16px;}
+    input[type="search"]{flex:1 1 280px; padding:10px 12px; border-radius:8px; border:1px solid var(--border); background:var(--card); color:var(--text);}
+    select{padding:10px 12px; border-radius:8px; border:1px solid var(--border); background:var(--card); color:var(--text);}
+    .card{background:var(--card); border:1px solid var(--border); border-radius:12px; padding:12px 14px; margin-bottom:12px;}
+    .file{display:flex; align-items:center; gap:12px; padding:10px 8px; border-radius:8px;}
+    .file:hover{background:#0e1630;}
+    .name{font-weight:600;}
+    .meta{color:var(--muted); font-size:12px;}
+    .badge{background:#142044; color:var(--accent); border:1px solid #233a7a; padding:2px 8px; border-radius:999px; font-size:12px;}
+    a{color:#9fc1ff; text-decoration:none;}
+    a:hover{text-decoration:underline;}
+    .muted{color:var(--muted); font-size:14px;}
+    footer{padding:16px; text-align:center; color:var(--muted); border-top:1px solid var(--border);}
+  </style>
+</head>
+<body>
+  <header>
+    <main>
+      <h1>APT Documents</h1>
+      <div class="sub">公開文件索引（自動從 GitHub 讀取）</div>
+    </main>
+  </header>
+
+  <main>
+    <div class="toolbar">
+      <input id="q" type="search" placeholder="搜尋檔名或副檔名…" />
+      <select id="type">
+        <option value="">全部類型</option>
+        <option value="pdf">PDF</option>
+        <option value="pptx">PowerPoint</option>
+        <option value="docx">Word</option>
+        <option value="xlsx">Excel</option>
+        <option value="csv">CSV</option>
+        <option value="txt">Text</option>
+      </select>
+      <span id="count" class="badge">0 files</span>
+    </div>
+
+    <div id="list"></div>
+    <p class="muted" id="tip"></p>
+  </main>
+
+  <footer>© <span id="yr"></span> APT Knowledge Base</footer>
+
+  <script>
+    // ======= 設定你自己的 GitHub Repo =======
+    const owner = "LimuHuang1210";
+    const repo  = "APT-DOC";
+    // 若 GitHub Pages 指向 docs/ 資料夾，改成 "docs"；如果在根目錄就留空字串 ""。
+    const path  = ""; // e.g., "docs"
+
+    // 支援顯示的副檔名
+    const allowExt = ["pdf","pptx","ppt","docx","doc","xlsx","xls","csv","txt"];
+
+    const api = path
+      ? `https://api.github.com/repos/${owner}/${repo}/contents/${path}`
+      : `https://api.github.com/repos/${owner}/${repo}/contents`;
+
+    const $list = document.getElementById('list');
+    const $q = document.getElementById('q');
+    const $type = document.getElementById('type');
+    const $count = document.getElementById('count');
+    const $tip = document.getElementById('tip');
+    document.getElementById('yr').textContent = new Date().getFullYear();
+
+    const icons = {
+      pdf:"📕", pptx:"📊", ppt:"📊", docx:"📄", doc:"📄", xlsx:"📈", xls:"📈", csv:"🧾", txt:"📝", other:"📁"
+    };
+
+    function fmtSize(bytes){
+      if(bytes==null) return "";
+      const units=["B","KB","MB","GB"]; let i=0; let n=bytes;
+      while(n>=1024 && i<units.length-1){ n/=1024; i++; }
+      return `${n.toFixed(n<10&&i>0?1:0)} ${units[i]}`;
+    }
+
+    function extOf(name){
+      const i=name.lastIndexOf("."); return i>-1 ? name.slice(i+1).toLowerCase() : "";
+    }
+
+    function render(items){
+      const q = $q.value.trim().toLowerCase();
+      const t = $type.value;
+      const rows = items
+        .filter(it => it.type === "file")
+        .filter(it => {
+          const e = extOf(it.name);
+          if(!allowExt.includes(e)) return false;
+          if(t && e!==t) return false;
+          if(q && !(`${it.name}`.toLowerCase().includes(q) || e.includes(q))) return false;
+          return true;
+        })
+        .sort((a,b)=> a.name.localeCompare(b.name));
+
+      $count.textContent = `${rows.length} file${rows.length===1?"":"s"}`;
+
+      if(!rows.length){
+        $list.innerHTML = `<div class="card">沒有符合條件的檔案。</div>`;
+        return;
+      }
+
+      const html = rows.map(it=>{
+        const e = extOf(it.name);
+        const icon = icons[e] || icons.other;
+        const url = it.download_url || it.html_url; // download_url 直接 RAW 下載
+        return `
+          <div class="card file">
+            <div style="font-size:22px">${icon}</div>
+            <div style="flex:1">
+              <div class="name"><a href="${url}" target="_blank"         <div class="meta">${e.toUpperCase()} · ${fmtSize(it.size)}</div>
+            </div>
+          </div>`;
+      }).join("");
+
+      $list.innerHTML = html;
+    }
+
+    async function load(){
+      try{
+        const res = await fetch(api, {headers:{'Accept':'application/vnd.github+json'}});
+        if(!res.ok) throw new Error(`GitHub API ${res.status}`);
+        const data = await res.json();
+        render(data);
+        $tip.textContent = "如未看到檔案，請確認：1) 此 Repo 為 Public；2) 檔案放在 Pages 指定的資料夾（root 或 docs）；3) GitHub API 每小時匿名呼叫上限 60 次。";
+      }catch(err){
+        console.error(err);
+        $list.innerHTML = `<div class="card">讀取失敗：${err.message}</div>`;
+        $tip.textContent = "若你的檔案存放在多層資料夾，請改用『全站掃描版』程式（見下方說明）。";
+      }
+    }
+
+    $q.addEventListener('input', load);
+    $type.addEventListener('change', load);
+    load();
+  </script>
+</body>
+</html>
