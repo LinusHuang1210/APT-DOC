@@ -1,46 +1,49 @@
-
 <!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>APT Knowledge Base</title>
+  <title>APT Documents (RAW Links)</title>
   <style>
     :root {
-      --bg:#0b1220; --card:#121a2b; --text:#e6ecff; --muted:#9fb0d9; --accent:#7aa2ff; --border:#23304d;
+      --bg:#0b1220; --card:#121a2b; --text:#e6ecff; --muted:#9fb0d9; --accent:#7aa2ff; --border:#23304d; --ok:#3ddc97; --warn:#f4b400;
     }
     *{box-sizing:border-box}
     body{margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto; background:var(--bg); color:var(--text);}
     header{padding:24px 16px; border-bottom:1px solid var(--border); background:linear-gradient(180deg,#0f172a,#0b1220);}
     h1{margin:0 0 8px; font-size:22px;}
     .sub{color:var(--muted); font-size:14px}
-    main{max-width:900px; margin:24px auto; padding:0 16px;}
+    main{max-width:1000px; margin:24px auto; padding:0 16px;}
     .toolbar{display:flex; gap:12px; flex-wrap:wrap; margin-bottom:16px;}
-    input[type="search"]{flex:1 1 280px; padding:10px 12px; border-radius:8px; border:1px solid var(--border); background:var(--card); color:var(--text);}
+    input[type="search"]{flex:1 1 320px; padding:10px 12px; border-radius:8px; border:1px solid var(--border); background:var(--card); color:var(--text);}
     select{padding:10px 12px; border-radius:8px; border:1px solid var(--border); background:var(--card); color:var(--text);}
+    .badge{background:#142044; color:var(--accent); border:1px solid #233a7a; padding:2px 8px; border-radius:999px; font-size:12px;}
     .card{background:var(--card); border:1px solid var(--border); border-radius:12px; padding:12px 14px; margin-bottom:12px;}
-    .file{display:flex; align-items:center; gap:12px; padding:10px 8px; border-radius:8px;}
-    .file:hover{background:#0e1630;}
+    .row{display:flex; align-items:center; gap:12px;}
     .name{font-weight:600;}
     .meta{color:var(--muted); font-size:12px;}
-    .badge{background:#142044; color:var(--accent); border:1px solid #233a7a; padding:2px 8px; border-radius:999px; font-size:12px;}
     a{color:#9fc1ff; text-decoration:none;}
     a:hover{text-decoration:underline;}
+    button.copy{padding:6px 10px; border-radius:8px; border:1px solid var(--border); background:#0e1630; color:#cfe0ff; cursor:pointer;}
+    button.copy:hover{background:#13214b}
     .muted{color:var(--muted); font-size:14px;}
+    .tip-ok{color:var(--ok)}
+    .tip-warn{color:var(--warn)}
     footer{padding:16px; text-align:center; color:var(--muted); border-top:1px solid var(--border);}
+    .kind{width:28px; height:28px; display:grid; place-items:center; border-radius:6px; background:#2a3350}
   </style>
 </head>
 <body>
   <header>
     <main>
       <h1>APT Documents</h1>
-      <div class="sub">公開文件索引（自動從 GitHub 讀取）</div>
+      <div class="sub">公開文件索引（連結皆為 <b>RAW</b> 直接下載網址，適用於 Copilot/Agent）</div>
     </main>
   </header>
 
   <main>
     <div class="toolbar">
-      <input id="q" type="search" placeholder="搜尋檔名或副檔名…" />
+      <input id="q" type="search" placeholder="搜尋檔名或路徑…" />
       <select id="type">
         <option value="">全部類型</option>
         <option value="pdf">PDF</option>
@@ -60,18 +63,13 @@
   <footer>© <span id="yr"></span> APT Knowledge Base</footer>
 
   <script>
-    // ======= 設定你自己的 GitHub Repo =======
-    const owner = "LinusHuang1210";
-    const repo  = "APT-DOC";
-    // 若 GitHub Pages 指向 docs/ 資料夾，改成 "docs"；如果在根目錄就留空字串 ""。
-    const path  = ""; // e.g., "docs"
+    // ========= 改成你的帳號與 Repo =========
+    const owner = "LinusHuang1210";   // ← 你的 GitHub 帳號
+    const repo  = "APT-DOC";         // ← 你的 Repo 名稱
+    // ====================================
 
-    // 支援顯示的副檔名
+    // 可顯示的副檔名
     const allowExt = ["pdf","pptx","ppt","docx","doc","xlsx","xls","csv","txt"];
-
-    const api = path
-      ? `https://api.github.com/repos/${owner}/${repo}/contents/${path}`
-      : `https://api.github.com/repos/${owner}/${repo}/contents`;
 
     const $list = document.getElementById('list');
     const $q = document.getElementById('q');
@@ -80,34 +78,31 @@
     const $tip = document.getElementById('tip');
     document.getElementById('yr').textContent = new Date().getFullYear();
 
-    const icons = {
-      pdf:"📕", pptx:"📊", ppt:"📊", docx:"📄", doc:"📄", xlsx:"📈", xls:"📈", csv:"🧾", txt:"📝", other:"📁"
-    };
+    const icons = { pdf:"📕", pptx:"📊", ppt:"📊", docx:"📄", doc:"📄", xlsx:"📈", xls:"📈", csv:"🧾", txt:"📝", other:"📁" };
 
     function fmtSize(bytes){
-      if(bytes==null) return "";
+      if(bytes==null || isNaN(bytes)) return "";
       const units=["B","KB","MB","GB"]; let i=0; let n=bytes;
       while(n>=1024 && i<units.length-1){ n/=1024; i++; }
       return `${n.toFixed(n<10&&i>0?1:0)} ${units[i]}`;
     }
+    function extOf(name){ const i=name.lastIndexOf("."); return i>-1 ? name.slice(i+1).toLowerCase() : ""; }
+    function esc(s){ return s.replace(/[&<>"]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m])); }
 
-    function extOf(name){
-      const i=name.lastIndexOf("."); return i>-1 ? name.slice(i+1).toLowerCase() : "";
-    }
-
-    function render(items){
+    function render(items, branch){
       const q = $q.value.trim().toLowerCase();
       const t = $type.value;
+
       const rows = items
-        .filter(it => it.type === "file")
+        .filter(it => it.type === "blob")
         .filter(it => {
-          const e = extOf(it.name);
+          const e = extOf(it.path);
           if(!allowExt.includes(e)) return false;
           if(t && e!==t) return false;
-          if(q && !(`${it.name}`.toLowerCase().includes(q) || e.includes(q))) return false;
+          if(q && !it.path.toLowerCase().includes(q)) return false;
           return true;
         })
-        .sort((a,b)=> a.name.localeCompare(b.name));
+        .sort((a,b)=> a.path.localeCompare(b.path));
 
       $count.textContent = `${rows.length} file${rows.length===1?"":"s"}`;
 
@@ -117,32 +112,70 @@
       }
 
       const html = rows.map(it=>{
-        const e = extOf(it.name);
+        const e = extOf(it.path);
         const icon = icons[e] || icons.other;
-        const url = it.download_url || it.html_url; // download_url 直接 RAW 下載
+        // 產生 RAW 直接網址與 GitHub blob 頁面
+        const raw = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${encodeURI(it.path)}`;
+        const blob = `https://github.com/${owner}/${repo}/blob/${branch}/${encodeURI(it.path)}`;
+        const baseName = it.path.split('/').pop();
         return `
-          <div class="card file">
-            <div style="font-size:22px">${icon}</div>
-            <div style="flex:1">
-              <div class="name"><a href="${url}" target="_blank"         <div class="meta">${e.toUpperCase()} · ${fmtSize(it.size)}</div>
+          <div class="card">
+            <div class="row">
+              <div class="kind" title="${e.toUpperCase()}">${icon}</div>
+              <div style="flex:1">
+                <div class="name">${raw}${esc(baseName)}</a></div>
+                <div class="meta">${esc(it.path)} · ${e.toUpperCase()} ${it.size?("· "+fmtSize(it.size)):""}</div>
+              </div>
+              <div style="display:flex; gap:8px">
+                <a class="muted" href="${blob}" target="_blank" rel="noopener" title="}" title="複製 RAW 連結">複製連結</button>
+              </div>
             </div>
           </div>`;
       }).join("");
 
       $list.innerHTML = html;
+
+      // 綁定複製按鈕
+      document.querySelectorAll("button.copy").forEach(btn=>{
+        btn.addEventListener("click", async ()=>{
+          try{
+            await navigator.clipboard.writeText(btn.dataset.url);
+            btn.textContent = "已複製";
+            setTimeout(()=>btn.textContent="複製連結", 1200);
+          }catch(e){
+            alert("無法複製，請手動複製：\n" + btn.dataset.url);
+          }
+        });
+      });
+
+      $tip.innerHTML = `提示：複製的 RAW 連結可提供給 Copilot/Agent 直接下載與解析。<br>
+        若檔案過大或下載受限，請確認此 Repo 為 Public，且單一檔案不超過 GitHub 上傳限制（建議 &lt; 100 MB）。`;
     }
 
     async function load(){
       try{
-        const res = await fetch(api, {headers:{'Accept':'application/vnd.github+json'}});
-        if(!res.ok) throw new Error(`GitHub API ${res.status}`);
-        const data = await res.json();
-        render(data);
-        $tip.textContent = "如未看到檔案，請確認：1) 此 Repo 為 Public；2) 檔案放在 Pages 指定的資料夾（root 或 docs）；3) GitHub API 每小時匿名呼叫上限 60 次。";
+        // 取得預設分支（main / master）
+        const repoMetaRes = await fetch(`https://api.github.com/repos/${owner}/${repo}`, {
+          headers:{'Accept':'application/vnd.github+json'}
+        });
+        if(!repoMetaRes.ok) throw new Error(`取得 Repo 失敗：HTTP ${repoMetaRes.status}`);
+        const repoMeta = await repoMetaRes.json();
+        const branch = repoMeta.default_branch || "main";
+
+        // 取得整個樹（含子資料夾）
+        const treeRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/git/trees/${branch}?recursive=1`, {
+          headers:{'Accept':'application/vnd.github+json'}
+        });
+        if(!treeRes.ok) throw new Error(`讀取檔案清單失敗：HTTP ${treeRes.status}`);
+        const tree = await treeRes.json();
+
+        if(!tree.tree){ throw new Error("API 回應不含檔案清單（tree）"); }
+        render(tree.tree, branch);
+
       }catch(err){
         console.error(err);
         $list.innerHTML = `<div class="card">讀取失敗：${err.message}</div>`;
-        $tip.textContent = "若你的檔案存放在多層資料夾，請改用『全站掃描版』程式（見下方說明）。";
+        $tip.innerHTML = `請確認：1) 此 Repo 為 Public；2) 檔案已推送到預設分支；3) GitHub API 每小時匿名呼叫上限 60 次；4) 如為私有 Repo，無法匿名讀取。`;
       }
     }
 
